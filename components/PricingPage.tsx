@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 
-import React from 'react';
+import React, { useState } from 'react';
 import type { User } from 'firebase/auth';
 
 type View = 'signup' | 'tool';
@@ -15,8 +15,7 @@ interface PricingPageProps {
 
 interface Plan {
     name: string;
-    price: string;
-    originalPrice?: string;
+    monthly: number;
     features: string[];
     bestFor: string;
     button: { text: string; style: string };
@@ -33,11 +32,12 @@ const CheckIcon: React.FC<{ className?: string }> = ({ className }) => (
 
 
 const PricingPage: React.FC<PricingPageProps> = ({ onNavigate, currentUser }) => {
-    
+    const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'yearly'>('monthly');
+    const YEARLY_DISCOUNT = 0.2;
     const plansData: Plan[] = [
         {
             name: 'Starter',
-            price: '$5',
+            monthly: 5,
             emoji: '💰',
             features: [
                 '30 images per month',
@@ -61,7 +61,7 @@ const PricingPage: React.FC<PricingPageProps> = ({ onNavigate, currentUser }) =>
         },
         {
             name: 'Pro',
-            price: '$12',
+            monthly: 12,
             emoji: '⭐',
             features: [
                 '100 images per month',
@@ -88,7 +88,7 @@ const PricingPage: React.FC<PricingPageProps> = ({ onNavigate, currentUser }) =>
         },
         {
             name: 'Business',
-            price: '$29',
+            monthly: 29,
             emoji: '🚀',
             features: [
                 '300 images per month',
@@ -112,7 +112,7 @@ const PricingPage: React.FC<PricingPageProps> = ({ onNavigate, currentUser }) =>
         },
         {
             name: 'Agency',
-            price: '$59',
+            monthly: 59,
             emoji: '👑',
             features: [
                 '800 images per month',
@@ -142,8 +142,12 @@ const PricingPage: React.FC<PricingPageProps> = ({ onNavigate, currentUser }) =>
             <h1 className="text-5xl font-extrabold tracking-tight text-gray-100 mb-4">
                 Subscriptions Plans
             </h1>
+            <div className="flex items-center justify-center gap-3 mb-4">
+                <button onClick={() => setBillingPeriod('monthly')} className={`px-4 py-2 rounded-full font-semibold text-sm ${billingPeriod==='monthly' ? 'bg-yellow-500 text-black' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'}`}>Monthly</button>
+                <button onClick={() => setBillingPeriod('yearly')} className={`px-4 py-2 rounded-full font-semibold text-sm ${billingPeriod==='yearly' ? 'bg-yellow-500 text-black' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'}`}>Yearly</button>
+            </div>
             <p className="text-lg text-gray-400 mb-12 max-w-2xl mx-auto">
-                Simple, transparent pricing. Choose the plan that's right for you and start creating viral thumbnails today.
+                {billingPeriod==='monthly' ? 'Monthly billing. Upgrade anytime.' : 'Yearly billing with 20% off. Billed annually.'}
             </p>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -160,17 +164,26 @@ const PricingPage: React.FC<PricingPageProps> = ({ onNavigate, currentUser }) =>
                         <h3 className="text-2xl font-bold text-white mb-2">{plan.emoji} {plan.name}</h3>
                         <div className="mb-6">
                             <div className="flex items-baseline gap-2">
-                                <span className="text-4xl font-extrabold text-white">{plan.price}</span>
-                                {plan.originalPrice && (
-                                    <span className="text-lg text-gray-500 line-through">{plan.originalPrice}</span>
-                                )}
-                                <span className="text-gray-400">/month</span>
+                                {(() => {
+                                    const isYearly = billingPeriod==='yearly';
+                                    const yearlyOriginal = Math.round(plan.monthly * 12);
+                                    const yearlyDiscounted = Math.round(plan.monthly * 12 * (1 - YEARLY_DISCOUNT));
+                                    const displayPrice = isYearly ? yearlyDiscounted : plan.monthly;
+                                    return (
+                                        <>
+                                            <span className="text-4xl font-extrabold text-white">${displayPrice}</span>
+                                            {isYearly && (
+                                                <span className="text-lg text-gray-500 line-through">${yearlyOriginal}</span>
+                                            )}
+                                            <span className="text-gray-400">{isYearly ? '/year' : '/month'}</span>
+                                        </>
+                                    );
+                                })()}
                             </div>
-                            {plan.originalPrice && (
-                                <div className="mt-2">
-                                    <span className="bg-green-500 text-white text-xs font-bold px-2 py-1 rounded">
-                                        Save {Math.round(((parseFloat(plan.originalPrice.replace('$', '')) - parseFloat(plan.price.replace('$', ''))) / parseFloat(plan.originalPrice.replace('$', '')) * 100))}%
-                                    </span>
+                            {billingPeriod==='yearly' && (
+                                <div className="mt-2 flex items-center gap-2">
+                                    <span className="bg-green-500 text-white text-xs font-bold px-2 py-1 rounded">Save {Math.round(YEARLY_DISCOUNT*100)}%</span>
+                                    <span className="text-xs text-gray-400">≈ ${(Math.round(plan.monthly * 12 * (1 - YEARLY_DISCOUNT))/12).toFixed(2)}/mo</span>
                                 </div>
                             )}
                         </div>

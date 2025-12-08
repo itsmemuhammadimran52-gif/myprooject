@@ -25,6 +25,9 @@ const SignupPage: React.FC<SignupPageProps> = ({ onNavigate, onSignupSuccess }) 
     const [imagePreview, setImagePreview] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [stage, setStage] = useState<'form' | 'verify'>('form');
+    const [verificationCode, setVerificationCode] = useState('');
+    const [info, setInfo] = useState<string | null>(null);
 
     const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -52,22 +55,65 @@ const SignupPage: React.FC<SignupPageProps> = ({ onNavigate, onSignupSuccess }) 
         // to the complete-profile page for new users or to the profile for existing users.
     };
     
+    const API_BASE = (import.meta as any).env?.VITE_API_URL || 'http://localhost:5000';
+
     const handleSignUp = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!email || !password || !fullName || !username) {
             setError("Please fill in all required fields.");
             return;
         }
-        
         setError(null);
+        setInfo(null);
         setIsLoading(true);
-        const result = await signUpWithDetails(email, password, fullName, username, profileImage);
-        setIsLoading(false);
-        
-        if (result.error) {
-            setError(result.error);
-        } else if (result.profile) {
-            onSignupSuccess(result.profile);
+        try {
+            const resp = await fetch(`${API_BASE}/api/send-verification`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email }),
+            });
+            const data = await (async () => { try { return await resp.json(); } catch { return null; } })();
+            if (!resp.ok || !data?.ok) {
+                throw new Error((data && data.error) || 'Failed to send verification code');
+            }
+            setStage('verify');
+            setInfo('Verification code sent to your email. Enter it below to complete signup.');
+        } catch (err: any) {
+            setError(err.message || 'Failed to send verification code.');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleVerifyAndCreate = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!verificationCode) {
+            setError('Please enter the verification code.');
+            return;
+        }
+        setError(null);
+        setInfo(null);
+        setIsLoading(true);
+        try {
+            const resp = await fetch(`${API_BASE}/api/verify-code`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, code: verificationCode }),
+            });
+            const data = await (async () => { try { return await resp.json(); } catch { return null; } })();
+            if (!resp.ok || !data?.ok) {
+                throw new Error((data && data.error) || 'Invalid verification code');
+            }
+            const result = await signUpWithDetails(email, password, fullName, username, profileImage);
+            if (result.error) {
+                setError(result.error);
+            } else if (result.profile) {
+                onSignupSuccess(result.profile);
+            }
+        } catch (err: any) {
+            setError(err.message || 'Verification failed.');
+        } finally {
+            setIsLoading(false);
         }
     };
 
@@ -95,7 +141,7 @@ const SignupPage: React.FC<SignupPageProps> = ({ onNavigate, onSignupSuccess }) 
                 <h1 className="text-4xl font-extrabold text-white mb-6">Create Account</h1>
                 {error && <p className="bg-red-900/50 border border-red-700 text-red-200 text-sm p-3 rounded-lg mb-4 text-center animate-fade-in">{error}</p>}
                 
-                <form onSubmit={handleSignUp} className="flex flex-col gap-4 text-left">
+                <form onSubmit={stage === 'form' ? handleSignUp : handleVerifyAndCreate} className="flex flex-col gap-4 text-left">
                     <div className="flex justify-center mb-2">
                         <label htmlFor="profile-image-upload" className="relative cursor-pointer group">
                             <div className="w-20 h-20 rounded-full bg-gray-700 border-2 border-gray-600 flex items-center justify-center overflow-hidden">
@@ -124,16 +170,24 @@ const SignupPage: React.FC<SignupPageProps> = ({ onNavigate, onSignupSuccess }) 
 
                     <div>
                         <label htmlFor="email" className="block text-sm font-medium text-gray-300 mb-1">Email Address</label>
-                        <input id="email" type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} className="bg-gray-900 border border-gray-600 text-gray-200 rounded-lg p-4 focus:ring-2 focus:ring-yellow-500 focus:outline-none transition w-full" required disabled={isLoading} />
+                        <input id="email" type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} className="bg-gray-900 border border-gray-600 text-gray-200 rounded-lg p-4 focus:ring-2 focus:ring-yellow-500 focus:outline-none transition w-full" required disabled={isLoading || stage === 'verify'} />
                     </div>
 
                     <div>
                         <label htmlFor="password" className="block text-sm font-medium text-gray-300 mb-1">Password</label>
-                        <input id="password" type="password" placeholder="6+ characters" value={password} onChange={(e) => setPassword(e.target.value)} className="bg-gray-900 border border-gray-600 text-gray-200 rounded-lg p-4 focus:ring-2 focus:ring-yellow-500 focus:outline-none transition w-full" required disabled={isLoading} />
+                        <input id="password" type="password" placeholder="6+ characters" value={password} onChange={(e) => setPassword(e.target.value)} className="bg-gray-900 border border-gray-600 text-gray-200 rounded-lg p-4 focus:ring-2 focus:ring-yellow-500 focus:outline-none transition w-full" required disabled={isLoading || stage === 'verify'} />
                     </div>
+
+                    {stage === 'verify' && (
+                        <div>
+                            <label htmlFor="verificationCode" className="block text-sm font-medium text-gray-300 mb-1">Verification Code</label>
+                            <input id="verificationCode" type="text" placeholder="Enter 6-digit code" value={verificationCode} onChange={(e) => setVerificationCode(e.target.value)} className="bg-gray-900 border border-gray-600 text-gray-200 rounded-lg p-4 focus:ring-2 focus:ring-yellow-500 focus:outline-none transition w-full" required disabled={isLoading} />
+                            {info && <p className="text-yellow-300 text-xs mt-2">{info}</p>}
+                        </div>
+                    )}
                     
                     <button type="submit" disabled={isLoading} className="w-full h-[52px] mt-2 flex items-center justify-center bg-gradient-to-br from-yellow-600 to-yellow-500 text-black font-bold py-3 px-6 rounded-lg transition-all duration-300 ease-in-out shadow-lg shadow-yellow-500/20 hover:shadow-xl hover:shadow-yellow-500/40 disabled:from-gray-600 disabled:to-gray-500 disabled:cursor-not-allowed">
-                       {isLoading ? <Spinner/> : 'Create Account'}
+                       {isLoading ? <Spinner/> : stage === 'form' ? 'Send Verification Code' : 'Verify & Create Account'}
                     </button>
                 </form>
                 
